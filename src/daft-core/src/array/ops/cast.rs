@@ -1602,9 +1602,16 @@ fn cast_sparse_to_dense_for_inner_dtype(
                 let values_array = values_series.downcast::<<$T as DaftDataType>::ArrayType>()
                 .unwrap()
                 .as_arrow();
-                for (idx, val) in index_array.into_iter().zip(values_array.into_iter()) {
-                    let list_start_offset = offsets.start_end(i).0;
-                    values[list_start_offset + *idx.unwrap() as usize] = *val.unwrap();
+
+                let cumsum_index_iter = index_array.into_iter().scan(0u64, |acc, offset| {
+                    if let Some(o) = offset {
+                        *acc += o;
+                    }
+                    Some(*acc)
+                });
+                let list_start_offset = offsets.start_end(i).0;
+                for (cumsum_idx, val) in cumsum_index_iter.zip(values_array.into_iter()) {
+                    values[list_start_offset + cumsum_idx as usize] = *val.unwrap();
                 }
             }
             Box::new(arrow2::array::PrimitiveArray::from_vec(values))
